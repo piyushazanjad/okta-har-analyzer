@@ -121,7 +121,6 @@
     .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
     .btn-ghost {
-      display: none;
       padding: 6px 14px; border-radius: 8px;
       background: transparent; border: 1px solid var(--border2);
       color: var(--text2); font-size: 12px; font-weight: 500;
@@ -558,7 +557,7 @@
     <div class="header-sub">Drop a HAR file · See the full story</div>
   </div>
   <div class="header-right">
-    <button class="btn-ghost" id="reset-btn" onclick="resetApp()">← New file</button>
+    <button class="btn-ghost" id="reset-btn" onclick="resetApp()" style="display:none">← New file</button>
     <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
   </div>
 </header>
