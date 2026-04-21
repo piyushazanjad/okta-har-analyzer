@@ -324,15 +324,18 @@ function extractRaw(entry) {
 export function parseHAR(harJson) {
   const allEntries = harJson.log?.entries || [];
 
-  // Keep only Okta + callback entries
-  const relevant = allEntries.filter(e => {
+  // Prefer Okta + callback entries; fall back to all entries
+  const oktaEntries = allEntries.filter(e => {
     try {
       return isOktaDomain(e.request.url) || isCallbackEntry(e);
     } catch { return false; }
   });
 
+  const noOktaRequests = oktaEntries.length === 0;
+  const relevant = noOktaRequests ? allEntries.filter(e => e.request?.url) : oktaEntries;
+
   if (relevant.length === 0) {
-    return { error: 'No Okta-related requests found in this HAR file. Make sure this HAR was captured during an Okta authentication flow.' };
+    return { error: 'No requests found in this HAR file.' };
   }
 
   const protocol = detectProtocol(relevant);
@@ -415,6 +418,7 @@ export function parseHAR(harJson) {
     hasErrors: errorSteps.length > 0,
     errorCount: errorSteps.length,
     phases: [...new Set(steps.map(s => s.phase))],
+    noOktaRequests,
     steps,
   };
 }
