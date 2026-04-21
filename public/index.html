@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Okta HAR Analyzer</title>
+  <title>HARlens</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <style>
@@ -277,6 +277,34 @@
     /* ── Analysis View ────────────────────────────────────────── */
     #analysis-view { display: none; }
 
+    /* Repair Warning Banner */
+    .repair-banner {
+      display: none;
+      padding: 9px 28px;
+      background: rgba(251,146,60,.1);
+      border-bottom: 1px solid rgba(251,146,60,.25);
+      color: var(--orange);
+      font-size: 12.5px;
+      gap: 8px;
+      align-items: center;
+    }
+    .repair-banner.visible { display: flex; }
+    .repair-banner svg { flex-shrink: 0; }
+
+    /* No-Okta Info Banner */
+    .no-okta-banner {
+      display: none;
+      padding: 9px 28px;
+      background: rgba(96,165,250,.08);
+      border-bottom: 1px solid rgba(96,165,250,.2);
+      color: var(--blue);
+      font-size: 12.5px;
+      gap: 8px;
+      align-items: center;
+    }
+    .no-okta-banner.visible { display: flex; }
+    .no-okta-banner svg { flex-shrink: 0; }
+
     /* Summary Bar */
     .summary-bar {
       padding: 10px 28px;
@@ -473,6 +501,35 @@
     .timing-total { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text2); }
     .timing-total strong { color: var(--text); }
 
+    /* ── Security Panel ───────────────────────────────────────── */
+    .security-panel {
+      padding: 14px 24px 0; flex-shrink: 0;
+    }
+    .security-finding {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 8px 10px; border-radius: 8px; margin-bottom: 6px;
+      border: 1px solid transparent;
+    }
+    .finding-high    { background: var(--red-dim);    border-color: rgba(248,113,113,.2); }
+    .finding-medium  { background: var(--yellow-dim); border-color: rgba(251,191,36,.2); }
+    .finding-warning { background: var(--orange-dim); border-color: rgba(251,146,60,.2); }
+    .finding-info    { background: var(--surface2);   border-color: var(--border2); }
+    .finding-icon  { font-size: 13px; flex-shrink: 0; line-height: 1.5; }
+    .finding-body  { min-width: 0; }
+    .finding-title { font-size: 12px; font-weight: 600; color: var(--text); }
+    .finding-detail{ font-size: 11px; color: var(--text2); margin-top: 2px; line-height: 1.5; }
+    .security-ok {
+      display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+      background: var(--green-dim); border-radius: 8px;
+      font-size: 12px; color: var(--green); font-weight: 600;
+      border: 1px solid rgba(52,211,153,.2); margin-bottom: 6px;
+    }
+    .security-panel-header {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 8px;
+    }
+
     /* ── Verdict Panel ────────────────────────────────────────── */
     .verdict-panel {
       padding: 28px 24px;
@@ -540,6 +597,194 @@
     .btn-verdict:active { transform: translateY(0); }
     .btn-verdict:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 
+    /* ── Filter Bar ───────────────────────────────────────────── */
+    .filter-bar {
+      padding: 8px 28px; border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .filter-input {
+      background: var(--surface3); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 5px 12px; color: var(--text);
+      font-size: 12px; font-family: inherit; outline: none; width: 190px;
+    }
+    .filter-input:focus { border-color: var(--blue); }
+    .filter-input::placeholder { color: var(--muted); }
+    .filter-divider { color: var(--border2); font-size: 14px; }
+    .phase-chip {
+      padding: 3px 11px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border2); background: var(--surface3);
+      color: var(--text2); transition: all .15s; font-family: inherit;
+    }
+    .phase-chip:hover { border-color: var(--blue); color: var(--blue); }
+    .phase-chip.active { background: var(--blue-dim); color: var(--blue); border-color: rgba(96,165,250,.3); }
+    .phase-chip.active-error { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,.3); }
+    .filter-count { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+    /* ── Keyboard Focus ───────────────────────────────────────── */
+    .step-row-hover.step-focused {
+      fill: rgba(96,165,250,.1) !important;
+      stroke: #60a5fa;
+      stroke-width: 1.5;
+    }
+
+    /* ── Copy Button ──────────────────────────────────────────── */
+    .raw-label-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .raw-label-row .raw-label { margin-bottom: 0; }
+    .copy-btn {
+      background: none; border: 1px solid var(--border2); border-radius: 5px;
+      padding: 1px 8px; font-size: 10px; color: var(--text2); cursor: pointer;
+      transition: all .15s; font-family: inherit; flex-shrink: 0;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--blue); background: var(--blue-dim); }
+
+    /* ── Compare / Diff ───────────────────────────────────────── */
+    #compare-section {
+      display: none; flex-direction: column; align-items: center;
+      padding: 40px 24px; gap: 20px; min-height: calc(100vh - 60px);
+      justify-content: center;
+    }
+    .compare-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      width: 100%; max-width: 760px;
+    }
+    .compare-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 14px; padding: 24px; text-align: center; cursor: pointer;
+      transition: border-color .2s; min-height: 140px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 8px;
+    }
+    .compare-card:hover { border-color: var(--blue); }
+    .compare-card.loaded { border-color: var(--green); background: var(--green-dim); }
+    .compare-card-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 2px;
+    }
+    .compare-card-name { font-size: 12px; color: var(--green); font-weight: 600; }
+    .compare-card-sub { font-size: 12px; color: var(--text2); }
+    .btn-run-diff {
+      padding: 11px 28px; background: var(--grad); color: #fff;
+      border: none; border-radius: 10px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s; font-family: inherit;
+      box-shadow: 0 4px 16px rgba(59,130,246,.3);
+    }
+    .btn-run-diff:hover { opacity: .9; }
+    .btn-run-diff:disabled { opacity: .4; cursor: not-allowed; }
+
+    #diff-view { display: none; }
+    .diff-summary-bar {
+      padding: 10px 28px; border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+    }
+    .diff-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      min-height: calc(100vh - 100px);
+    }
+    .diff-col {
+      padding: 20px 24px; border-right: 1px solid var(--border);
+      overflow-y: auto;
+    }
+    .diff-col:last-child { border-right: none; }
+    .diff-col-title {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .diff-step {
+      border-radius: 8px; margin-bottom: 5px;
+      border: 1px solid transparent; font-size: 12px; overflow: hidden;
+    }
+    .diff-step-matched { background: var(--surface2); border-color: var(--border); }
+    .diff-step-only    { background: var(--blue-dim); border-color: rgba(96,165,250,.25); }
+    .diff-step-missing { background: var(--surface3); opacity: .4; border-style: dashed; border-color: var(--border2); }
+    .diff-step-header {
+      padding: 9px 12px; cursor: pointer; display: flex;
+      align-items: flex-start; gap: 8px;
+    }
+    .diff-step-header:hover { filter: brightness(1.08); }
+    .diff-step-chevron {
+      font-size: 9px; color: var(--muted); margin-top: 3px;
+      flex-shrink: 0; transition: transform .2s;
+    }
+    .diff-step.expanded .diff-step-chevron { transform: rotate(90deg); }
+    .diff-step-header-body { flex: 1; min-width: 0; }
+    .diff-step-name { font-weight: 600; color: var(--text); }
+    .diff-step-meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text2); margin-top: 3px; }
+    .diff-delta-faster { color: var(--green); font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .diff-delta-slower { color: var(--red); font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .diff-step-body {
+      display: none; padding: 0 12px 10px; border-top: 1px solid var(--border);
+    }
+    .diff-step.expanded .diff-step-body { display: block; }
+    .diff-step-url {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      color: var(--text2); word-break: break-all; padding: 7px 0 5px;
+    }
+    .diff-detail-section { margin-top: 8px; }
+    .diff-detail-label {
+      font-size: 9px; font-weight: 700; letter-spacing: .8px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+    }
+    .diff-detail-table { width: 100%; border-collapse: collapse; }
+    .diff-detail-table td {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      padding: 2px 4px; vertical-align: top; color: var(--text2);
+    }
+    .diff-detail-table td:first-child { color: var(--muted); white-space: nowrap; padding-right: 10px; }
+    .diff-detail-pre {
+      font-family: 'JetBrains Mono', monospace; font-size: 10px;
+      background: var(--surface3); border-radius: 5px; padding: 6px 8px;
+      white-space: pre-wrap; word-break: break-all; color: var(--text2);
+      max-height: 140px; overflow-y: auto;
+    }
+
+    /* ── Chat Panel ───────────────────────────────────────────── */
+    .chat-panel {
+      padding: 16px 24px 24px; display: none;
+      border-top: 1px solid var(--border); margin-top: 4px;
+    }
+    .chat-panel.visible { display: block; }
+    .chat-panel-header {
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+    }
+    .chat-messages {
+      max-height: 240px; overflow-y: auto; margin-bottom: 10px;
+      display: flex; flex-direction: column; gap: 7px;
+    }
+    .chat-msg {
+      font-size: 12px; line-height: 1.6; padding: 8px 12px;
+      border-radius: 10px; max-width: 95%;
+    }
+    .chat-msg-user {
+      background: var(--blue-dim); color: var(--text);
+      border: 1px solid rgba(96,165,250,.2); align-self: flex-end;
+    }
+    .chat-msg-assistant {
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); align-self: flex-start; max-width: 100%;
+    }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 8px; padding: 8px 12px; color: var(--text);
+      font-size: 12px; font-family: inherit; outline: none;
+      resize: none; height: 38px; max-height: 80px; overflow-y: auto;
+    }
+    .chat-input:focus { border-color: var(--blue); }
+    .btn-send {
+      padding: 0 16px; background: var(--blue-mid); border: none;
+      border-radius: 8px; color: #fff; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s; font-family: inherit; flex-shrink: 0;
+    }
+    .btn-send:hover { opacity: .85; }
+    .btn-send:disabled { opacity: .4; cursor: not-allowed; }
+
     /* ── Scrollbar ────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -551,10 +796,17 @@
 
 <!-- ── Header ──────────────────────────────────────────────────────── -->
 <header class="app-header">
-  <div class="logo">O</div>
+  <div class="logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <line x1="16.5" y1="16.5" x2="22" y2="22"/>
+      <line x1="11" y1="8" x2="11" y2="14"/>
+      <line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+  </div>
   <div>
-    <div class="header-title">Okta HAR Analyzer</div>
-    <div class="header-sub">Drop a HAR file · See the full story</div>
+    <div class="header-title">HARlens</div>
+    <div class="header-sub">Bring your auth flows into focus.</div>
   </div>
   <div class="header-right">
     <button class="btn-ghost" id="reset-btn" onclick="resetApp()" style="display:none">← New file</button>
@@ -566,7 +818,7 @@
 <section id="upload-section">
   <div class="upload-eyebrow">
     <div class="upload-eyebrow-dot"></div>
-    Okta Auth Flow Inspector
+    Auth Flow Inspector
   </div>
 
   <div class="drop-card" id="drop-card">
@@ -600,11 +852,45 @@
     <div class="spinner"></div>
     <div class="parsing-text" id="parsing-text">Parsing HAR file…</div>
   </div>
+  <button class="btn-ghost" onclick="enterCompareMode()" style="font-size:12px">⇄ Compare two files</button>
+</section>
+
+<!-- ── Compare Upload ────────────────────────────────────────────────────── -->
+<section id="compare-section">
+  <div class="upload-eyebrow">
+    <div class="upload-eyebrow-dot"></div>
+    Compare two HAR files
+  </div>
+  <div class="compare-grid">
+    <div class="compare-card" id="card-a" onclick="document.getElementById('file-input-a').click()">
+      <input type="file" id="file-input-a" accept=".har,application/json" onchange="handleFileA(this.files[0])"/>
+      <div class="compare-card-label">HAR A — Baseline</div>
+      <div style="font-size:28px">📂</div>
+      <div class="compare-card-sub" id="card-a-sub">Click to upload</div>
+    </div>
+    <div class="compare-card" id="card-b" onclick="document.getElementById('file-input-b').click()">
+      <input type="file" id="file-input-b" accept=".har,application/json" onchange="handleFileB(this.files[0])"/>
+      <div class="compare-card-label">HAR B — Compare</div>
+      <div style="font-size:28px">📂</div>
+      <div class="compare-card-sub" id="card-b-sub">Click to upload</div>
+    </div>
+  </div>
+  <button class="btn-run-diff" id="btn-run-diff" onclick="runDiff()" disabled>Compare Flows</button>
+  <button class="btn-ghost" onclick="exitCompareMode()">← Back to single file</button>
 </section>
 
 <!-- ── Analysis ─────────────────────────────────────────────────────── -->
 <div id="analysis-view">
+  <div class="repair-banner" id="repair-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span id="repair-banner-text"></span>
+  </div>
+  <div class="no-okta-banner" id="no-okta-banner">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>This file does not contain any Okta requests — showing all captured traffic. Okta-specific analysis (protocol detection, security checks) will be limited.</span>
+  </div>
   <div class="summary-bar" id="summary-bar"></div>
+  <div class="filter-bar" id="filter-bar"></div>
 
   <div class="main-grid">
     <!-- Swimlane -->
@@ -634,8 +920,9 @@
       </div>
     </div>
 
-    <!-- Verdict -->
+    <!-- Verdict + Security -->
     <div class="verdict-panel">
+      <div class="security-panel" id="security-panel"></div>
       <div class="panel-header">
         <span class="panel-header-label">The Verdict</span>
         <div class="panel-header-line"></div>
@@ -651,7 +938,24 @@
           ✦ Get AI Verdict
         </button>
       </div>
+      <div class="chat-panel" id="chat-panel">
+        <div class="chat-panel-header">Ask a follow-up</div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chat-input" placeholder="Ask about this flow…" rows="1" onkeydown="chatKeydown(event)"></textarea>
+          <button class="btn-send" id="chat-send" onclick="sendChat()">Send</button>
+        </div>
+      </div>
     </div>
+  </div>
+</div>
+
+<!-- ── Diff View ─────────────────────────────────────────────────────────── -->
+<div id="diff-view">
+  <div class="diff-summary-bar" id="diff-summary-bar"></div>
+  <div class="diff-grid">
+    <div class="diff-col" id="diff-col-a"></div>
+    <div class="diff-col" id="diff-col-b"></div>
   </div>
 </div>
 
@@ -676,6 +980,8 @@ initTheme();
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let flowData = null, selectedStep = null, verdictFetched = false;
+let activeFilter = { text: '', phase: 'all' };
+let harWarning = null;
 
 // ─── Drag & Drop ─────────────────────────────────────────────────────────────
 const dropCard = document.getElementById('drop-card');
@@ -695,26 +1001,79 @@ document.addEventListener('drop', e => {
   if (file) handleFile(file);
 });
 
+// ─── HAR Repair ───────────────────────────────────────────────────────────────
+// Attempts to salvage a truncated HAR file by finding the last complete entry
+// and closing all open JSON brackets/objects.
+function repairTruncatedHAR(text) {
+  const stack = [];
+  let inString = false;
+  let escape = false;
+  let lastGoodPos = -1;
+  let lastGoodStack = null;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+
+    if (ch === '{' || ch === '[') {
+      stack.push(ch);
+    } else if (ch === '}' || ch === ']') {
+      stack.pop();
+      // Record every position where we just closed an entry object nested at depth ≥ 2
+      if (ch === '}' && stack.length >= 2) {
+        lastGoodPos = i + 1;
+        lastGoodStack = [...stack];
+      }
+    }
+  }
+
+  if (lastGoodPos === -1) return null;
+  const closing = lastGoodStack.slice().reverse().map(c => c === '{' ? '}' : ']').join('');
+  try {
+    return JSON.parse(text.substring(0, lastGoodPos) + closing);
+  } catch { return null; }
+}
+
 // ─── File Handling ────────────────────────────────────────────────────────────
 function handleFile(file) {
   if (!file) return;
+  harWarning = null;
   showParsing('Reading file…');
   const reader = new FileReader();
   reader.onload = async e => {
     try {
+      const raw = e.target.result;
+      let har;
+      try {
+        har = JSON.parse(raw);
+      } catch {
+        showParsing('Repairing truncated HAR…');
+        har = repairTruncatedHAR(raw);
+        if (!har) { hideParsing(); alert('Could not parse or repair this HAR file — the JSON may be too corrupt.'); return; }
+        const originalCount = (raw.match(/"startedDateTime"/g) || []).length;
+        const repairedCount = har.log?.entries?.length || 0;
+        harWarning = `Truncated HAR — file was cut off mid-capture. Recovered ${repairedCount} of ~${originalCount} entries. Some requests near the end may be missing.`;
+      }
       showParsing('Finding Okta requests…');
-      const har = JSON.parse(e.target.result);
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(har),
       });
+      if (!res.ok) {
+        let msg = `Server error ${res.status}`;
+        try { const d = await res.json(); msg = d.error || msg; } catch { }
+        hideParsing(); alert(msg); return;
+      }
       const data = await res.json();
-      if (!res.ok || data.error) { hideParsing(); alert(data.error || 'Analysis failed'); return; }
+      if (data.error) { hideParsing(); alert(data.error); return; }
       flowData = data;
       hideParsing();
       showAnalysis();
-    } catch (err) { hideParsing(); alert('Failed to parse file: ' + err.message); }
+    } catch (err) { hideParsing(); alert('Failed to read file: ' + err.message); }
   };
   reader.readAsText(file);
 }
@@ -732,8 +1091,17 @@ function hideParsing() {
 }
 
 function resetApp() {
-  flowData = null; selectedStep = null; verdictFetched = false;
+  flowData = null; selectedStep = null; verdictFetched = false; keyboardFocus = null;
+  activeFilter = { text: '', phase: 'all' }; chatMessages = [];
+  compareMode = false; flowDataA = null; flowDataB = null;
+  harWarning = null;
+  document.getElementById('repair-banner').classList.remove('visible');
+  document.getElementById('no-okta-banner').classList.remove('visible');
+  document.getElementById('chat-panel').classList.remove('visible');
+  document.getElementById('chat-messages').innerHTML = '';
   document.getElementById('upload-section').style.display = '';
+  document.getElementById('compare-section').style.display = 'none';
+  document.getElementById('diff-view').style.display = 'none';
   document.getElementById('analysis-view').style.display = 'none';
   document.getElementById('reset-btn').style.display = 'none';
   document.getElementById('file-input').value = '';
@@ -749,8 +1117,176 @@ function showAnalysis() {
   document.getElementById('upload-section').style.display = 'none';
   document.getElementById('analysis-view').style.display = 'block';
   document.getElementById('reset-btn').style.display = '';
+  const banner = document.getElementById('repair-banner');
+  if (harWarning) {
+    document.getElementById('repair-banner-text').textContent = harWarning;
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+  document.getElementById('no-okta-banner').classList.toggle('visible', !!flowData.noOktaRequests);
   renderSummaryBar();
+  renderSecurityPanel(flowData);
+  renderFilterBar();
   renderSwimlane();
+}
+
+// ─── Security Audit ───────────────────────────────────────────────────────────
+function runSecurityAudit(fd) {
+  const findings = [];
+  const proto = (fd.protocol || '').toLowerCase();
+
+  // 1. Implicit flow
+  if (fd.steps.some(s => s.keyParams?.response_type === 'token')) {
+    findings.push({ sev:'high', icon:'🔴', title:'Implicit Flow Detected',
+      detail:'response_type=token is deprecated and insecure. Use Authorization Code + PKCE.' });
+  }
+
+  // 2. PKCE missing on OIDC/auth-code flow
+  const isAuthCode = proto.includes('oidc') || proto.includes('authorization code');
+  const hasPKCE    = fd.steps.some(s => s.keyParams?.code_challenge_method);
+  const hasImplicit = fd.steps.some(s => s.keyParams?.response_type === 'token');
+  if (isAuthCode && !hasPKCE && !hasImplicit) {
+    findings.push({ sev:'medium', icon:'🟡', title:'PKCE Not Used',
+      detail:'Public clients should send code_challenge_method=S256 to prevent auth code interception.' });
+  }
+
+  // 3. Expired JWT
+  const now = Date.now() / 1000;
+  outer3: for (const s of fd.steps) {
+    for (const jwt of (s.artifacts?.jwts || [])) {
+      if (jwt.payload?.exp && jwt.payload.exp < now) {
+        findings.push({ sev:'warning', icon:'🟠', title:'Expired JWT Detected',
+          detail:`"${s.name}": token expired ${new Date(jwt.payload.exp*1000).toLocaleString()}` });
+        break outer3;
+      }
+    }
+  }
+
+  // 4. Weak JWT algorithm (HS256)
+  outer4: for (const s of fd.steps) {
+    for (const jwt of (s.artifacts?.jwts || [])) {
+      if (jwt.header?.alg === 'HS256') {
+        findings.push({ sev:'medium', icon:'🟡', title:'Weak JWT Algorithm (HS256)',
+          detail:'HS256 is symmetric and requires sharing the secret. Prefer RS256 or ES256.' });
+        break outer4;
+      }
+    }
+  }
+
+  // 5. Missing nonce in OIDC
+  if (isAuthCode && !fd.steps.some(s => s.keyParams?.nonce)) {
+    findings.push({ sev:'medium', icon:'🟡', title:'Missing nonce Parameter',
+      detail:'OIDC flows should include a nonce to prevent ID token replay attacks.' });
+  }
+
+  // 6. HTTP 429 rate limiting
+  if (fd.steps.some(s => s.status === 429)) {
+    findings.push({ sev:'high', icon:'🔴', title:'Rate Limiting Detected (HTTP 429)',
+      detail:'Requests are being rate-limited. Check x-rate-limit-* headers and add backoff logic.' });
+  }
+
+  // 7. Token lifetime > 24h
+  outer7: for (const s of fd.steps) {
+    for (const jwt of (s.artifacts?.jwts || [])) {
+      const { iat, exp } = jwt.payload || {};
+      if (iat && exp && (exp - iat) > 86400) {
+        findings.push({ sev:'info', icon:'ℹ️', title:'Long Token Lifetime (>24h)',
+          detail:`"${s.name}": lifetime is ~${Math.round((exp-iat)/3600)}h. Shorter lifetimes reduce exposure.` });
+        break outer7;
+      }
+    }
+  }
+
+  // 8. prompt=none with error
+  for (const s of fd.steps) {
+    if (s.keyParams?.prompt === 'none' && s.isError) {
+      findings.push({ sev:'warning', icon:'🟠', title:'Silent Auth Failed (prompt=none)',
+        detail:`"${s.name}": silent authentication failed — session may be expired or MFA is required.` });
+      break;
+    }
+  }
+
+  return findings;
+}
+
+function renderSecurityPanel(fd) {
+  const findings = runSecurityAudit(fd);
+  const el = document.getElementById('security-panel');
+  if (!findings.length) {
+    el.innerHTML = `<div class="security-panel-header">Security</div>
+      <div class="security-ok">✅ No issues detected</div>`;
+    return;
+  }
+  const sevClass = { high:'finding-high', medium:'finding-medium', warning:'finding-warning', info:'finding-info' };
+  el.innerHTML = `<div class="security-panel-header">Security — ${findings.length} finding${findings.length>1?'s':''}</div>` +
+    findings.map(f => `<div class="security-finding ${sevClass[f.sev]||'finding-info'}">
+      <span class="finding-icon">${f.icon}</span>
+      <div class="finding-body">
+        <div class="finding-title">${escHtml(f.title)}</div>
+        <div class="finding-detail">${escHtml(f.detail)}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ─── Filter ───────────────────────────────────────────────────────────────────
+function getFilteredSteps() {
+  if (!flowData) return [];
+  const { text, phase } = activeFilter;
+  return flowData.steps.filter(step => {
+    const t = text.toLowerCase();
+    const textOk = !t || step.name.toLowerCase().includes(t) || step.url.toLowerCase().includes(t);
+    let phaseOk = true;
+    if (phase === 'auth')    phaseOk = ['authorization','authentication'].includes(step.phase);
+    else if (phase === 'token')   phaseOk = step.phase === 'token';
+    else if (phase === 'session') phaseOk = step.phase === 'session';
+    else if (phase === 'saml')    phaseOk = step.phase === 'saml';
+    else if (phase === 'errors')  phaseOk = !!step.isError;
+    return textOk && phaseOk;
+  });
+}
+
+function renderFilterBar() {
+  const chips = [
+    { key: 'all', label: 'All' },
+    { key: 'auth', label: 'Auth' },
+    { key: 'token', label: 'Token' },
+    { key: 'session', label: 'Session' },
+    { key: 'saml', label: 'SAML' },
+    { key: 'errors', label: 'Errors' },
+  ];
+  const filtered = getFilteredSteps();
+  const total = flowData?.steps?.length || 0;
+  document.getElementById('filter-bar').innerHTML = `
+    <input class="filter-input" id="filter-text" placeholder="Search steps…" value="${escHtml(activeFilter.text)}" oninput="onFilterText(this.value)"/>
+    <span class="filter-divider">|</span>
+    ${chips.map(c => {
+      const isActive = activeFilter.phase === c.key;
+      const cls = isActive ? (c.key === 'errors' ? 'phase-chip active-error' : 'phase-chip active') : 'phase-chip';
+      return `<button class="${cls}" onclick="onFilterPhase('${c.key}')">${c.label}</button>`;
+    }).join('')}
+    ${filtered.length < total ? `<span class="filter-count">${filtered.length} / ${total}</span>` : ''}`;
+}
+
+function onFilterText(val) {
+  activeFilter.text = val;
+  const sel = { start: document.getElementById('filter-text')?.selectionStart, end: document.getElementById('filter-text')?.selectionEnd };
+  renderFilterBar();
+  const input = document.getElementById('filter-text');
+  if (input) { input.focus(); input.setSelectionRange(sel.start ?? val.length, sel.end ?? val.length); }
+  renderSwimlane();
+  if (selectedStep !== null && !getFilteredSteps().some(s => flowData.steps.indexOf(s) === selectedStep)) {
+    closeDrawer();
+  }
+}
+
+function onFilterPhase(phase) {
+  activeFilter.phase = phase;
+  renderFilterBar();
+  renderSwimlane();
+  if (selectedStep !== null && !getFilteredSteps().some(s => flowData.steps.indexOf(s) === selectedStep)) {
+    closeDrawer();
+  }
 }
 
 // ─── Summary Bar ──────────────────────────────────────────────────────────────
@@ -766,7 +1302,8 @@ function renderSummaryBar() {
     <span style="color:var(--border2)">·</span>
     <span class="stag ${healthClass}"><span class="stag-dot"></span>${healthIcon} ${healthText}</span>
     <span style="color:var(--border2)">·</span>
-    <span class="stag stag-domain">🔒 ${escHtml(oktaDomain)}</span>`;
+    <span class="stag stag-domain">🔒 ${escHtml(oktaDomain)}</span>
+    <button class="btn-ghost" onclick="exportReport()" style="margin-left:auto;font-size:11px;padding:4px 12px">↓ Export</button>`;
 }
 
 // ─── Swimlane (SVG) ────────────────────────────────────────────────────────────
@@ -789,7 +1326,8 @@ function statusColor(s) {
 function renderSwimlane() {
   const wrap = document.getElementById('swimlane-svg-wrap');
   const W = wrap.clientWidth || 700;
-  const HEADER_H = 76, ROW_H = 64, TOTAL_H = HEADER_H + flowData.steps.length * ROW_H + 24;
+  const stepsToRender = getFilteredSteps();
+  const HEADER_H = 76, ROW_H = 64, TOTAL_H = HEADER_H + stepsToRender.length * ROW_H + 24;
 
   const P = { browser: Math.round(W * .14), okta: Math.round(W * .50), app: Math.round(W * .86) };
 
@@ -829,8 +1367,9 @@ function renderSwimlane() {
   }
 
   let steps = '';
-  for (let i = 0; i < flowData.steps.length; i++) {
-    const step = flowData.steps[i];
+  for (let i = 0; i < stepsToRender.length; i++) {
+    const step = stepsToRender[i];
+    const origIdx = flowData.steps.indexOf(step);
     const y = HEADER_H + i * ROW_H + ROW_H / 2;
     const color = phaseColor(step);
     const scode = statusColor(step.status);
@@ -853,7 +1392,7 @@ function renderSwimlane() {
     // Row bg
     steps += `<rect x="2" y="${y-ROW_H/2+4}" width="${W-4}" height="${ROW_H-8}"
       rx="8" fill="transparent" stroke="none"
-      class="step-row-hover" data-idx="${i}" style="cursor:pointer;transition:fill .12s"/>`;
+      class="step-row-hover" data-idx="${origIdx}" style="cursor:pointer;transition:fill .12s"/>`;
 
     // Arrow
     steps += `<line x1="${lx1}" y1="${y}" x2="${lx2}" y2="${y}"
@@ -867,7 +1406,7 @@ function renderSwimlane() {
     // Step number
     steps += `<text x="9" y="${y+4}" text-anchor="start"
       fill="${BRD2C}" font-size="10" font-family="JetBrains Mono,monospace"
-      pointer-events="none">${String(i+1).padStart(2,'0')}</text>`;
+      pointer-events="none">${String(origIdx+1).padStart(2,'0')}</text>`;
 
     // Status badge
     const sbw=44, sbh=20, sbx=W-sbw-8, sby=y-10;
@@ -933,7 +1472,8 @@ function showStepDrawer(idx) {
 
   // ── OVERVIEW ──
   let ov = '';
-  ov += `<div class="raw-section"><div class="raw-label">URL</div>
+  ov += `<div class="raw-section">
+    <div class="raw-label-row"><div class="raw-label">URL</div><button class="copy-btn" onclick="copyById('${registerCopy(step.url)}',this)">⎘ copy</button></div>
     <div class="url-display">${escHtml(step.url)}</div></div>`;
 
   if (step.keyParams && Object.keys(step.keyParams).length) {
@@ -968,7 +1508,8 @@ function showStepDrawer(idx) {
         const d = new Date(jwt.payload.exp*1000), expired = d < new Date();
         claims.push({k:'exp', v:d.toLocaleString()+(expired?' ⚠️ EXPIRED':''), warn:expired});
       }
-      ov += `<div class="raw-section"><div class="raw-label">JWT ${ji+1} — ${jwt.header.alg||'?'}</div>
+      ov += `<div class="raw-section">
+        <div class="raw-label-row"><div class="raw-label">JWT ${ji+1} — ${jwt.header.alg||'?'}</div><button class="copy-btn" onclick="copyById('${registerCopy(jwt.raw||'')}',this)">⎘ token</button></div>
         <div class="jwt-block" id="${id}">
           <div class="jwt-tab-bar">
             <button class="jwt-tab active" onclick="switchJwtTab('${id}','claims')">Claims</button>
@@ -1004,7 +1545,8 @@ function showStepDrawer(idx) {
 
   // ── REQUEST ──
   const raw = step.raw || {};
-  let req = `<div class="raw-section"><div class="raw-label">Request Line</div>
+  let req = `<div class="raw-section">
+    <div class="raw-label-row"><div class="raw-label">Request Line</div><button class="copy-btn" onclick="copyById('${registerCopy(step.method+' '+step.url)}',this)">⎘ copy</button></div>
     <div class="raw-body" style="max-height:60px">${escHtml(step.method)} ${escHtml(step.url)}</div></div>`;
 
   if (raw.reqHeaders?.length) {
@@ -1016,7 +1558,8 @@ function showStepDrawer(idx) {
         </div>`).join('')}</div></div>`;
   }
   req += raw.reqBody
-    ? `<div class="raw-section"><div class="raw-label">Body <span style="color:var(--blue);font-weight:400;text-transform:none">(${raw.reqBody.type})</span></div>
+    ? `<div class="raw-section">
+       <div class="raw-label-row"><div class="raw-label">Body <span style="color:var(--blue);font-weight:400;text-transform:none">(${raw.reqBody.type})</span></div><button class="copy-btn" onclick="copyById('${registerCopy(raw.reqBody.display)}',this)">⎘ copy</button></div>
        <div class="raw-body">${escHtml(raw.reqBody.display)}</div></div>`
     : `<div class="raw-section"><div class="raw-label">Body</div><div class="raw-empty">No request body</div></div>`;
 
@@ -1042,7 +1585,8 @@ function showStepDrawer(idx) {
       }).join('')}</div></div>`;
   }
   res += raw.resBody
-    ? `<div class="raw-section"><div class="raw-label">Body <span style="color:var(--blue);font-weight:400;text-transform:none">(${raw.resBody.type})</span></div>
+    ? `<div class="raw-section">
+       <div class="raw-label-row"><div class="raw-label">Body <span style="color:var(--blue);font-weight:400;text-transform:none">(${raw.resBody.type})</span></div><button class="copy-btn" onclick="copyById('${registerCopy(raw.resBody.display)}',this)">⎘ copy</button></div>
        <div class="raw-body">${escHtml(raw.resBody.display)}</div></div>`
     : `<div class="raw-section"><div class="raw-label">Body</div><div class="raw-empty">Empty response body</div></div>`;
 
@@ -1132,6 +1676,7 @@ async function getVerdict() {
     content.innerHTML = renderMarkdown(rawText);
   }
   content.classList.remove('verdict-cursor');
+  document.getElementById('chat-panel').classList.add('visible');
   btn.textContent = 'Re-analyze'; btn.disabled = false;
   btn.onclick = () => {
     verdictFetched = false;
@@ -1154,6 +1699,22 @@ function renderMarkdown(text) {
     .replace(/✅|⚠️|❌/g, m=>`<span style="font-size:15px">${m}</span>`);
 }
 
+// ─── Copy Helpers ─────────────────────────────────────────────────────────────
+const copySources = {};
+let copyIdCounter = 0;
+function registerCopy(text) {
+  const id = 'cp-' + (copyIdCounter++);
+  copySources[id] = text;
+  return id;
+}
+function copyById(id, btn) {
+  navigator.clipboard.writeText(copySources[id] || '').then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1161,6 +1722,373 @@ function escHtml(s) {
 function escSvg(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ─── Multi-HAR Diff ───────────────────────────────────────────────────────────
+let compareMode = false, flowDataA = null, flowDataB = null;
+
+function enterCompareMode() {
+  compareMode = true;
+  document.getElementById('upload-section').style.display = 'none';
+  document.getElementById('compare-section').style.display = 'flex';
+  document.getElementById('reset-btn').style.display = '';
+}
+function exitCompareMode() {
+  compareMode = false; flowDataA = null; flowDataB = null;
+  document.getElementById('compare-section').style.display = 'none';
+  document.getElementById('upload-section').style.display = '';
+  document.getElementById('reset-btn').style.display = 'none';
+  document.getElementById('card-a').classList.remove('loaded');
+  document.getElementById('card-b').classList.remove('loaded');
+  document.getElementById('card-a-sub').textContent = 'Click to upload';
+  document.getElementById('card-b-sub').textContent = 'Click to upload';
+  document.getElementById('btn-run-diff').disabled = true;
+}
+
+async function loadHarForCompare(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const raw = e.target.result;
+        let har;
+        try {
+          har = JSON.parse(raw);
+        } catch {
+          har = repairTruncatedHAR(raw);
+          if (!har) { reject(new Error('Could not parse or repair this HAR file.')); return; }
+        }
+        const res = await fetch('/api/analyze', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(har),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) reject(new Error(data.error || 'Analysis failed'));
+        else resolve(data);
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('File read failed'));
+    reader.readAsText(file);
+  });
+}
+
+async function handleFileA(file) {
+  if (!file) return;
+  document.getElementById('card-a-sub').textContent = 'Analyzing…';
+  try {
+    flowDataA = await loadHarForCompare(file);
+    document.getElementById('card-a').classList.add('loaded');
+    document.getElementById('card-a-sub').textContent = `✓ ${flowDataA.totalSteps} steps · ${flowDataA.protocol}`;
+    if (flowDataA && flowDataB) document.getElementById('btn-run-diff').disabled = false;
+  } catch (err) { document.getElementById('card-a-sub').textContent = `⚠️ ${err.message}`; }
+}
+
+async function handleFileB(file) {
+  if (!file) return;
+  document.getElementById('card-b-sub').textContent = 'Analyzing…';
+  try {
+    flowDataB = await loadHarForCompare(file);
+    document.getElementById('card-b').classList.add('loaded');
+    document.getElementById('card-b-sub').textContent = `✓ ${flowDataB.totalSteps} steps · ${flowDataB.protocol}`;
+    if (flowDataA && flowDataB) document.getElementById('btn-run-diff').disabled = false;
+  } catch (err) { document.getElementById('card-b-sub').textContent = `⚠️ ${err.message}`; }
+}
+
+function computeDiff(fdA, fdB) {
+  const stepsA = fdA.steps, stepsB = fdB.steps;
+  const usedB = new Set();
+  // Map step name → array of indices in B
+  const bIdx = new Map();
+  stepsB.forEach((s, i) => {
+    if (!bIdx.has(s.name)) bIdx.set(s.name, []);
+    bIdx.get(s.name).push(i);
+  });
+
+  const matchedA = new Map(); // aIdx → bIdx
+  for (let i = 0; i < stepsA.length; i++) {
+    const candidates = bIdx.get(stepsA[i].name) || [];
+    const match = candidates.find(j => !usedB.has(j));
+    if (match !== undefined) { matchedA.set(i, match); usedB.add(match); }
+  }
+  const matchedB = new Map(Array.from(matchedA.entries()).map(([a,b])=>[b,a]));
+
+  const colA = stepsA.map((s, i) => ({
+    step: s,
+    type: matchedA.has(i) ? 'matched' : 'only',
+    peer: matchedA.has(i) ? stepsB[matchedA.get(i)] : null,
+  }));
+  const colB = stepsB.map((s, i) => ({
+    step: s,
+    type: matchedB.has(i) ? 'matched' : 'only',
+    peer: matchedB.has(i) ? stepsA[matchedB.get(i)] : null,
+  }));
+
+  return {
+    matched: matchedA.size,
+    onlyA: stepsA.length - matchedA.size,
+    onlyB: stepsB.length - matchedA.size,
+    colA, colB,
+  };
+}
+
+function renderDiffSteps(col, side) {
+  const sc = s => s.status >= 400 ? 'var(--red)' : s.status >= 300 ? 'var(--yellow)' : 'var(--green)';
+
+  function headersTable(headers) {
+    if (!headers || !headers.length) return '<span style="color:var(--muted);font-size:10px">—</span>';
+    return `<table class="diff-detail-table">${headers.map(h =>
+      `<tr><td>${escHtml(h.name)}</td><td>${escHtml(h.value)}</td></tr>`
+    ).join('')}</table>`;
+  }
+
+  function bodyBlock(body) {
+    if (!body) return '<span style="color:var(--muted);font-size:10px">—</span>';
+    return `<div class="diff-detail-pre">${escHtml(body)}</div>`;
+  }
+
+  return col.map(({ step: s, type, peer }, idx) => {
+    const cls = type === 'matched' ? 'diff-step-matched' : 'diff-step-only';
+    const id = `diff-row-${side}-${idx}`;
+
+    let badge = '';
+    let deltaHtml = '';
+    if (type === 'matched') {
+      const delta = (s.timing || 0) - (peer?.timing || 0);
+      if (delta !== 0)
+        deltaHtml = `<div class="${delta > 0 ? 'diff-delta-slower' : 'diff-delta-faster'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}ms vs baseline</div>`;
+    } else {
+      badge = `<div style="font-size:10px;color:var(--blue);font-weight:700;margin-top:2px">Only in ${side === 'a' ? 'A' : 'B'}</div>`;
+    }
+
+    const raw = s.raw || {};
+    const detailHtml = `
+      <div class="diff-step-url">${escHtml(s.url || '')}</div>
+      <div class="diff-detail-section">
+        <div class="diff-detail-label">Request Headers</div>
+        ${headersTable(raw.reqHeaders)}
+      </div>
+      ${raw.reqBody ? `<div class="diff-detail-section">
+        <div class="diff-detail-label">Request Body</div>
+        ${bodyBlock(raw.reqBody)}
+      </div>` : ''}
+      <div class="diff-detail-section">
+        <div class="diff-detail-label">Response Headers</div>
+        ${headersTable(raw.resHeaders)}
+      </div>
+      ${raw.resBody ? `<div class="diff-detail-section">
+        <div class="diff-detail-label">Response Body</div>
+        ${bodyBlock(raw.resBody)}
+      </div>` : ''}`;
+
+    return `<div class="diff-step ${cls}" id="${id}">
+      <div class="diff-step-header" onclick="toggleDiffRow('${id}')">
+        <div class="diff-step-chevron">▶</div>
+        <div class="diff-step-header-body">
+          <div class="diff-step-name">${escHtml(s.name)}</div>
+          <div class="diff-step-meta">${escHtml(s.method)} <span style="color:${sc(s)}">${s.status}</span> · ${s.timing||'?'}ms</div>
+          ${deltaHtml}${badge}
+        </div>
+      </div>
+      <div class="diff-step-body">${detailHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDiffRow(id) {
+  document.getElementById(id).classList.toggle('expanded');
+}
+
+function runDiff() {
+  if (!flowDataA || !flowDataB) return;
+  const diff = computeDiff(flowDataA, flowDataB);
+  document.getElementById('compare-section').style.display = 'none';
+  document.getElementById('diff-view').style.display = 'block';
+
+  document.getElementById('diff-summary-bar').innerHTML = `
+    <span class="stag stag-steps">${diff.matched} matched</span>
+    <span style="color:var(--border2)">·</span>
+    <span class="stag stag-err">${diff.onlyA} only in A</span>
+    <span style="color:var(--border2)">·</span>
+    <span class="stag stag-protocol">${diff.onlyB} only in B</span>
+    <span style="color:var(--border2)">·</span>
+    <span class="stag stag-domain">🔒 ${escHtml(flowDataA.oktaDomain)}</span>
+    <button class="btn-ghost" onclick="exitDiffView()" style="margin-left:auto;font-size:11px;padding:4px 12px">← New comparison</button>`;
+
+  document.getElementById('diff-col-a').innerHTML = `
+    <div class="diff-col-title">📄 HAR A — ${escHtml(flowDataA.protocol)} · ${flowDataA.totalSteps} steps</div>
+    ${renderDiffSteps(diff.colA, 'a')}`;
+  document.getElementById('diff-col-b').innerHTML = `
+    <div class="diff-col-title">📄 HAR B — ${escHtml(flowDataB.protocol)} · ${flowDataB.totalSteps} steps</div>
+    ${renderDiffSteps(diff.colB, 'b')}`;
+}
+
+function exitDiffView() {
+  document.getElementById('diff-view').style.display = 'none';
+  flowDataA = null; flowDataB = null;
+  document.getElementById('card-a').classList.remove('loaded');
+  document.getElementById('card-b').classList.remove('loaded');
+  document.getElementById('card-a-sub').textContent = 'Click to upload';
+  document.getElementById('card-b-sub').textContent = 'Click to upload';
+  document.getElementById('file-input-a').value = '';
+  document.getElementById('file-input-b').value = '';
+  document.getElementById('btn-run-diff').disabled = true;
+  document.getElementById('compare-section').style.display = 'flex';
+}
+
+// ─── Chat with Claude ─────────────────────────────────────────────────────────
+let chatMessages = [];
+
+function chatKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+function renderChatMessages() {
+  const el = document.getElementById('chat-messages');
+  el.innerHTML = chatMessages.map(m =>
+    `<div class="chat-msg chat-msg-${m.role}">${renderMarkdown(m.content)}</div>`
+  ).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !flowData) return;
+
+  chatMessages.push({ role: 'user', content: text });
+  input.value = '';
+  renderChatMessages();
+
+  const sendBtn = document.getElementById('chat-send');
+  sendBtn.disabled = true;
+
+  let assistantMsg = { role: 'assistant', content: '' };
+  chatMessages.push(assistantMsg);
+  renderChatMessages();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flowData, messages: chatMessages.slice(0, -1) }),
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const { text: t, error } = JSON.parse(payload);
+          if (t) assistantMsg.content += t;
+          if (error) assistantMsg.content += `⚠️ ${error}`;
+          renderChatMessages();
+        } catch {}
+      }
+    }
+  } catch (err) {
+    assistantMsg.content = `⚠️ ${err.message}`;
+    renderChatMessages();
+  }
+  sendBtn.disabled = false;
+}
+
+// ─── Export Report ────────────────────────────────────────────────────────────
+function exportReport() {
+  if (!flowData) return;
+  const findings = runSecurityAudit(flowData);
+  const verdict = document.getElementById('verdict-content')?.innerText || '';
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const severityColors = { high:'#f87171', medium:'#fbbf24', warning:'#fb923c', info:'#94a3b8' };
+  const findingsHtml = findings.length
+    ? findings.map(f=>`<tr><td>${esc(f.icon)}</td><td style="color:${severityColors[f.sev]||'#94a3b8'}">${esc(f.title)}</td><td>${esc(f.detail)}</td></tr>`).join('')
+    : '<tr><td colspan="3" style="color:#34d399">✅ No security issues detected</td></tr>';
+
+  const stepsHtml = flowData.steps.map((s,i)=>`<tr class="${s.isError?'err':''}">
+    <td>${i+1}</td>
+    <td>${esc(s.name)}</td>
+    <td>${esc(s.method)}</td>
+    <td style="color:${s.status>=400?'#f87171':s.status>=300?'#fbbf24':'#34d399'}">${s.status||'?'}</td>
+    <td>${s.timing||'—'}ms</td>
+    <td>${esc(s.phase)}</td>
+    <td>${esc(s.error?.errorCode||s.error?.errorSummary||'')}</td>
+  </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>
+<title>HARlens Report — ${esc(flowData.oktaDomain)}</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#06080f;color:#f1f5f9;margin:0;padding:32px;font-size:14px}
+  h1{font-size:22px;font-weight:800;background:linear-gradient(135deg,#f1f5f9,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px}
+  .meta{color:#94a3b8;font-size:12px;margin-bottom:32px}
+  h2{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#475569;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(148,163,184,.1)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;padding:8px 10px;color:#475569;border-bottom:1px solid rgba(148,163,184,.1);font-size:10px;text-transform:uppercase;letter-spacing:.6px}
+  td{padding:8px 10px;border-bottom:1px solid rgba(148,163,184,.06);vertical-align:top;font-family:'Courier New',monospace}
+  tr.err td{background:rgba(248,113,113,.06)}
+  .verdict{background:#0c1220;border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:20px;white-space:pre-wrap;font-size:13px;line-height:1.8;font-family:system-ui,sans-serif}
+  .footer{margin-top:40px;font-size:11px;color:#475569;border-top:1px solid rgba(148,163,184,.1);padding-top:16px}
+</style></head><body>
+<h1>HARlens — Auth Flow Report</h1>
+<div class="meta">Protocol: ${esc(flowData.protocol)} &nbsp;·&nbsp; Domain: ${esc(flowData.oktaDomain)} &nbsp;·&nbsp; ${flowData.totalSteps} steps &nbsp;·&nbsp; Generated: ${new Date().toLocaleString()}</div>
+<h2>Security Findings (${findings.length})</h2>
+<table><tr><th></th><th>Finding</th><th>Detail</th></tr>${findingsHtml}</table>
+<h2>Auth Flow Steps</h2>
+<table><tr><th>#</th><th>Step</th><th>Method</th><th>Status</th><th>Time</th><th>Phase</th><th>Error</th></tr>${stepsHtml}</table>
+${verdict ? `<h2>AI Verdict</h2><div class="verdict">${esc(verdict)}</div>` : ''}
+<div class="footer">Generated by HARlens &nbsp;·&nbsp; Bring your auth flows into focus.</div>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `authray-report-${flowData.oktaDomain.replace(/\./g,'-')}.html`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── Keyboard Navigation ──────────────────────────────────────────────────────
+let keyboardFocus = null;
+
+function setKeyboardFocus(idx) {
+  document.querySelectorAll('.step-row-hover').forEach(el => el.classList.remove('step-focused'));
+  keyboardFocus = idx;
+  if (idx === null || !flowData) return;
+  const el = document.querySelector(`.step-row-hover[data-idx="${idx}"]`);
+  if (el) {
+    el.classList.add('step-focused');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (!flowData) return;
+  // Don't hijack when typing in an input/textarea
+  if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+
+  const total = flowData?.steps?.length || 0;
+  if (!total) return;
+
+  if (e.key === 'ArrowDown' || e.key === 'j') {
+    e.preventDefault();
+    const next = keyboardFocus === null ? 0 : (keyboardFocus + 1) % total;
+    setKeyboardFocus(next);
+  } else if (e.key === 'ArrowUp' || e.key === 'k') {
+    e.preventDefault();
+    const prev = keyboardFocus === null ? total - 1 : (keyboardFocus - 1 + total) % total;
+    setKeyboardFocus(prev);
+  } else if (e.key === 'Escape') {
+    closeDrawer();
+    setKeyboardFocus(null);
+  } else if ((e.key === 'Enter' || e.key === ' ') && keyboardFocus !== null) {
+    e.preventDefault();
+    showStepDrawer(keyboardFocus);
+  }
+});
 
 let rsz;
 window.addEventListener('resize', () => {
