@@ -1,6 +1,6 @@
-# Okta HAR Analyzer
+# HARlens
 
-A developer support tool for analyzing Okta authentication flows captured in HAR files. Drop in a HAR file and get a visual swimlane breakdown of the auth flow, inline JWT/SAML decoding, and an AI-powered verdict explaining what happened and how to fix it.
+Bring your auth flows into focus. Drop in a HAR file and get a visual swimlane breakdown of the authentication flow, inline JWT/SAML decoding, AI-powered diagnosis, side-by-side HAR comparison, and a Claude chat for follow-up questions.
 
 ![Dark mode](https://img.shields.io/badge/theme-dark%20%2F%20light-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
@@ -11,7 +11,7 @@ A developer support tool for analyzing Okta authentication flows captured in HAR
 ## What it does
 
 **1. Auth Flow Visualization**
-Parses the HAR and filters it down to the Okta-relevant requests, then renders an SVG swimlane showing the full authentication sequence across Browser → Okta → Application. Each step is color-coded by phase (auth, token, SAML) with status code badges.
+Parses the HAR and filters it down to the Okta-relevant requests, then renders an SVG swimlane showing the full authentication sequence across Browser → Okta → Application. Each step is color-coded by phase (auth, token, SAML) with status code badges. Falls back to all requests for non-Okta HAR files.
 
 **2. Protocol Detection**
 Automatically identifies the flow type:
@@ -36,6 +36,15 @@ Sends the structured flow to Claude and streams back:
 - Exact failure point with error codes
 - Root cause analysis
 - Step-by-step fix with Okta Admin Console locations
+
+**5. HAR Comparison**
+Upload two HAR files side-by-side to diff them:
+- Matched, only-in-A, and only-in-B steps highlighted
+- Timing deltas shown per matched step (faster / slower vs baseline)
+- Each row is expandable to reveal the full URL, request/response headers, and body
+
+**6. Chat with Claude**
+After loading a HAR, ask follow-up questions about the flow in a streaming chat panel — scoped to the parsed flow context.
 
 ---
 
@@ -78,7 +87,7 @@ Reproduce the auth flow you want to debug while the network tab is open, then ex
 ## Stack
 
 - **Backend** — Node.js + Express
-- **AI** — Anthropic Claude API (`claude-4-6-opus`) with SSE streaming
+- **AI** — Anthropic Claude API (`claude-opus-4-6`) with SSE streaming
 - **Frontend** — Vanilla HTML/CSS/JS, SVG swimlane, Inter + JetBrains Mono fonts
 - **HAR parsing** — Custom parser (`harParser.js`) with zlib inflate for SAMLRequest decoding
 
@@ -88,7 +97,7 @@ Reproduce the auth flow you want to debug while the network tab is open, then ex
 
 ```
 okta-har-analyzer/
-├── server.js          # Express server — /api/analyze and /api/verdict
+├── server.js          # Express server — /api/analyze, /api/verdict, /api/chat
 ├── harParser.js       # HAR parsing, artifact extraction, Claude prompt builder
 ├── public/
 │   └── index.html     # Full frontend (styles + JS inline)
