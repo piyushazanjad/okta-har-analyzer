@@ -189,6 +189,13 @@ function isOktaDomain(url) {
   return /\.okta\.com|\.okta-emea\.com|\.oktapreview\.com|\.okta-gov\.com/.test(url);
 }
 
+function isOktaAuthPath(url) {
+  try {
+    const { pathname } = new URL(url);
+    return /^\/(oauth2|idp|login|app)\//i.test(pathname);
+  } catch { return false; }
+}
+
 function isCallbackEntry(entry) {
   const url = entry.request.url;
   const body = entry.request.postData?.text || '';
@@ -226,7 +233,7 @@ const SURFACE_PARAMS = new Set([
   'scope', 'response_type', 'grant_type', 'client_id', 'redirect_uri',
   'code_challenge_method', 'nonce', 'prompt', 'state', 'error',
   'error_description', 'code', 'idp', 'acr_values', 'max_age',
-  'response_mode', 'login_hint',
+  'response_mode', 'login_hint', 'iss', 'issuer',
 ]);
 
 function extractKeyParams(url, postBody) {
@@ -324,10 +331,26 @@ function extractRaw(entry) {
 export function parseHAR(harJson) {
   const allEntries = harJson.log?.entries || [];
 
-  // Prefer Okta + callback entries; fall back to all entries
+  // Also include entries that redirect TO an Okta domain or Okta auth path in their Location header
+  function redirectsToOkta(entry) {
+    const loc = entry.response?.headers?.find(h => h.name.toLowerCase() === 'location')?.value || '';
+    return isOktaDomain(loc) || /\/(oauth2|idp|login|app)\//i.test(loc);
+  }
+
+  // Also include entries that carry an iss param pointing to a known Okta-like issuer
+  function hasOktaIssuer(entry) {
+    try {
+      const u = new URL(entry.request.url);
+      const iss = u.searchParams.get('iss') || u.searchParams.get('issuer');
+      return !!iss;
+    } catch { return false; }
+  }
+
+  // Prefer Okta + callback + Okta-adjacent entries; fall back to all entries
   const oktaEntries = allEntries.filter(e => {
     try {
-      return isOktaDomain(e.request.url) || isCallbackEntry(e);
+      return isOktaDomain(e.request.url) || isOktaAuthPath(e.request.url) ||
+             isCallbackEntry(e) || redirectsToOkta(e) || hasOktaIssuer(e);
     } catch { return false; }
   });
 
@@ -378,6 +401,13 @@ export function parseHAR(harJson) {
     const timing = Math.round((entry.timings?.wait || 0) + (entry.timings?.receive || 0));
     const raw = extractRaw(entry);
 
+    // Extract Location header from redirects
+    let locationHeader = null;
+    if (status >= 300 && status < 400) {
+      const loc = entry.response?.headers?.find(h => h.name.toLowerCase() === 'location');
+      if (loc) locationHeader = loc.value;
+    }
+
     return {
       index,
       name: endpoint?.name || `Request → ${hostname}`,
@@ -386,6 +416,7 @@ export function parseHAR(harJson) {
       from, to,
       method: entry.request.method,
       url,
+      hostname,
       status,
       statusText: entry.response?.statusText || '',
       timing,
@@ -396,6 +427,7 @@ export function parseHAR(harJson) {
         saml: saml || null,
       },
       raw,
+      locationHeader,
       isError: !!error,
       isRedirect: status >= 300 && status < 400,
     };
@@ -404,19 +436,114 @@ export function parseHAR(harJson) {
   const errorSteps = steps.filter(s => s.isError);
 
   // Detect the Okta domain
+  // A "default" Okta domain matches *.okta.com (exactly two labels, e.g. foo.okta.com).
+  // A "custom" domain is anything else serving Okta auth paths (okta.company.com, login.company.com, etc.)
   let oktaDomain = 'your-org.okta.com';
+  let customOktaDomain = null;
+  let defaultOktaDomain = null;
   for (const e of relevant) {
-    if (isOktaDomain(e.request.url)) {
-      try { oktaDomain = new URL(e.request.url).hostname; break; } catch {}
+    try {
+      const h = new URL(e.request.url).hostname;
+      const isDefault = /^[^.]+\.okta\.com$/.test(h);
+      const hasOktaPath = isOktaAuthPath(e.request.url);
+      if (isOktaDomain(e.request.url) || hasOktaPath) {
+        if (isDefault) {
+          defaultOktaDomain = defaultOktaDomain || h;
+        } else if (hasOktaPath) {
+          customOktaDomain = customOktaDomain || h;
+        }
+        oktaDomain = oktaDomain === 'your-org.okta.com' ? h : oktaDomain;
+      }
+    } catch {}
+  }
+  // Also extract custom domain from iss params in the flow
+  for (const step of steps) {
+    const issHost = step.keyParams?.iss ? (() => { try { return new URL(step.keyParams.iss).hostname; } catch { return null; } })() : null;
+    if (issHost && issHost !== defaultOktaDomain) customOktaDomain = customOktaDomain || issHost;
+  }
+
+  // ─── Domain-switch detection ──────────────────────────────────────────────
+  // Detects when an SSO flow that starts on one Okta domain (including custom/vanity
+  // domains) later redirects the /authorize request to a different Okta domain.
+  // This breaks SSO because sessions are domain-scoped.
+  //
+  // Strategy: identify all "Okta auth endpoints" (any host serving /oauth2/, /idp/,
+  // /login/, /app/ Okta paths, or an iss= param pointing to a domain) and detect
+  // when the host changes across the redirect chain.
+  const domainSwitchWarnings = [];
+
+  function extractIssuerDomain(url) {
+    try {
+      const u = new URL(url);
+      const iss = u.searchParams.get('iss') || u.searchParams.get('issuer');
+      if (iss) return new URL(iss).hostname;
+    } catch {}
+    return null;
+  }
+
+  // Collect the sequence of "auth-serving" hostnames in flow order,
+  // including both actual request hosts and redirect Location targets.
+  const authHostSequence = []; // [{hostname, stepIndex, source: 'request'|'location'|'iss', url}]
+
+  for (const step of steps) {
+    // ISS param in a URL tells us which domain the IdP expects
+    const issHost = extractIssuerDomain(step.url);
+    if (issHost) {
+      authHostSequence.push({ hostname: issHost, stepIndex: step.index, source: 'iss', url: step.url });
+    }
+
+    // Any request to an Okta-style auth path
+    if (isOktaDomain(step.url) || isOktaAuthPath(step.url)) {
+      try {
+        const h = new URL(step.url).hostname;
+        authHostSequence.push({ hostname: h, stepIndex: step.index, source: 'request', url: step.url });
+      } catch {}
+    }
+
+    // Location header pointing to an Okta auth path or Okta domain
+    if (step.locationHeader) {
+      try {
+        const absLoc = step.locationHeader.startsWith('/') ? `https://${step.hostname}${step.locationHeader}` : step.locationHeader;
+        const locUrl = new URL(absLoc);
+        if (isOktaDomain(locUrl.hostname) || isOktaAuthPath(absLoc)) {
+          authHostSequence.push({ hostname: locUrl.hostname, stepIndex: step.index, source: 'location', url: absLoc });
+        }
+        // Also check iss in the Location URL
+        const locIss = extractIssuerDomain(absLoc);
+        if (locIss) {
+          authHostSequence.push({ hostname: locIss, stepIndex: step.index, source: 'iss', url: absLoc });
+        }
+      } catch {}
+    }
+  }
+
+  // Walk the sequence and flag when hostname changes
+  for (let i = 1; i < authHostSequence.length; i++) {
+    const prev = authHostSequence[i - 1];
+    const curr = authHostSequence[i];
+    if (prev.hostname !== curr.hostname && curr.source !== 'iss') {
+      // Only warn if the previous authoritative domain (from iss or actual request) differs
+      // from the current auth request domain — ignore same-host changes
+      domainSwitchWarnings.push({
+        stepIndex: curr.stepIndex,
+        from: prev.hostname,
+        to: curr.hostname,
+        url: curr.url,
+        locationHeader: steps[curr.stepIndex]?.locationHeader || null,
+        message: `Auth domain switched from ${prev.hostname} to ${curr.hostname} — SSO session will not transfer across domains`,
+      });
     }
   }
 
   return {
     protocol,
     oktaDomain,
+    customOktaDomain,
+    defaultOktaDomain,
     totalSteps: steps.length,
     hasErrors: errorSteps.length > 0,
     errorCount: errorSteps.length,
+    domainSwitchWarnings,
     phases: [...new Set(steps.map(s => s.phase))],
     noOktaRequests,
     steps,
@@ -427,8 +554,12 @@ export function parseHAR(harJson) {
 export function buildClaudePrompt(flowData) {
   const stepsText = flowData.steps.map((step, i) => {
     const parts = [`Step ${i + 1}: [${step.from.toUpperCase()} → ${step.to.toUpperCase()}] ${step.name}`];
+    parts.push(`  URL: ${step.url}`);
     parts.push(`  ${step.method} | HTTP ${step.status} | ${step.timing}ms`);
 
+    if (step.locationHeader) {
+      parts.push(`  Redirect → ${step.locationHeader}`);
+    }
     if (step.keyParams) {
       const p = Object.entries(step.keyParams).map(([k, v]) => `${k}=${v}`).join(', ');
       parts.push(`  Params: ${p}`);
@@ -452,15 +583,28 @@ export function buildClaudePrompt(flowData) {
     return parts.join('\n');
   }).join('\n\n');
 
+  const domainSwitchSection = flowData.domainSwitchWarnings?.length
+    ? `\nDOMAIN SWITCH WARNINGS (high-priority SSO session issues):\n` +
+      flowData.domainSwitchWarnings.map(w =>
+        `  ⚠ Step ${w.stepIndex + 1}: ${w.message}\n    From URL: ${w.url}${w.locationHeader ? `\n    Redirect to: ${w.locationHeader}` : ''}`
+      ).join('\n')
+    : '';
+
+  const domainSection = flowData.customOktaDomain && flowData.defaultOktaDomain
+    ? `CUSTOM DOMAIN: ${flowData.customOktaDomain}\nDEFAULT ORG DOMAIN: ${flowData.defaultOktaDomain}`
+    : `ORG DOMAIN: ${flowData.oktaDomain}`;
+
   return `You are a senior Okta Developer Support Engineer analyzing an auth flow captured in a HAR file. Give a precise, actionable verdict.
 
 DETECTED PROTOCOL: ${flowData.protocol}
-ORG DOMAIN: ${flowData.oktaDomain}
+${domainSection}
 TOTAL STEPS CAPTURED: ${flowData.totalSteps}
-ERRORS FOUND: ${flowData.errorCount}
+ERRORS FOUND: ${flowData.errorCount}${domainSwitchSection}
 
 FLOW STEPS:
 ${stepsText}
+
+IMPORTANT: If you see both a custom domain and the default *.okta.com domain in the flow, pay close attention to where the switch occurs. An SSO session established on a custom domain is NOT automatically available on the default okta.com domain and vice versa — this is a common cause of unexpected re-authentication prompts.
 
 Respond in exactly this format — no extra sections, no preamble:
 
@@ -472,13 +616,13 @@ Respond in exactly this format — no extra sections, no preamble:
 
 ## Failure Point
 [If HEALTHY: "No failures detected."
-If WARNING/BROKEN: "Step N — [step name]: [what specifically failed — be exact about error codes, redirect mismatches, token issues, etc.]"]
+If WARNING/BROKEN: "Step N — [step name]: [what specifically failed — be exact about error codes, redirect mismatches, domain switches, token issues, etc.]"]
 
 ## Root Cause
-[Technical deep-dive: why did it fail? Mention specific Okta error codes if present, common misconfigs (redirect URI mismatch, app not assigned, wrong auth server, MFA policy, etc.)]
+[Technical deep-dive: why did it fail? Mention specific Okta error codes if present, common misconfigs (redirect URI mismatch, app not assigned, wrong auth server, MFA policy, custom domain vs default domain session isolation, etc.)]
 
 ## The Fix
-[Numbered list — exact steps to resolve. Reference specific Okta Admin Console locations (e.g., "Applications > [App] > Sign On > Edit")]
+[Numbered list — exact steps to resolve. If this is a third-party app domain mismatch, clearly state which party needs to fix it and what they need to change. Reference specific Okta Admin Console locations where relevant (e.g., "Applications > [App] > Sign On > Edit")]
 
 ## Verify in Okta Admin Console
 [Bullet list: 3-5 specific things to check and where to find them]

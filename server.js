@@ -72,7 +72,16 @@ app.post('/api/chat', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
   try {
-    const systemContext = `You are analyzing an Okta auth flow: ${flowData.protocol} on ${flowData.oktaDomain}, ${flowData.totalSteps} steps, ${flowData.hasErrors ? flowData.errorCount + ' errors' : 'no errors'}. Answer follow-up questions concisely and technically.`;
+    const domainContext = flowData.customOktaDomain && flowData.defaultOktaDomain
+      ? `custom domain ${flowData.customOktaDomain} AND default domain ${flowData.defaultOktaDomain} (domain switch detected)`
+      : flowData.oktaDomain;
+    const domainSwitchContext = flowData.domainSwitchWarnings?.length
+      ? ` Domain switch warnings: ${flowData.domainSwitchWarnings.map(w => w.message).join('; ')}.`
+      : '';
+    const stepsContext = flowData.steps.map((s, i) =>
+      `Step ${i + 1}: ${s.method} ${s.url} → HTTP ${s.status}${s.locationHeader ? ` → ${s.locationHeader}` : ''}${s.keyParams ? ` [${Object.entries(s.keyParams).map(([k,v]) => `${k}=${v}`).join(',')}]` : ''}`
+    ).join('\n');
+    const systemContext = `You are analyzing an Okta auth flow: ${flowData.protocol} on ${domainContext}, ${flowData.totalSteps} steps, ${flowData.hasErrors ? flowData.errorCount + ' errors' : 'no errors'}.${domainSwitchContext} Answer follow-up questions concisely and technically.\n\nFull step-by-step URL trace:\n${stepsContext}`;
     const allMessages = [
       { role: 'user', content: systemContext },
       { role: 'assistant', content: 'Understood. Ask me anything about this auth flow.' },
