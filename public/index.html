@@ -641,6 +641,80 @@
     }
     .copy-btn:hover { color: var(--text); border-color: var(--blue); background: var(--blue-dim); }
 
+    /* ── Redirect Chain ───────────────────────────────────────── */
+    #redirect-chain-section {
+      margin-top: 20px;
+    }
+    .redirect-chain-header {
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; user-select: none;
+      padding: 6px 0;
+    }
+    .redirect-chain-header:hover .panel-header-label { color: var(--text2); }
+    .redirect-chain-count {
+      font-size: 11px; color: var(--muted);
+      background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 1px 8px; flex-shrink: 0;
+    }
+    .redirect-chain-toggle {
+      font-size: 10px; color: var(--muted); flex-shrink: 0; transition: transform .2s;
+    }
+    .redirect-chain-toggle.open { transform: rotate(90deg); }
+    #redirect-chain-body {
+      display: none; margin-top: 12px;
+    }
+    .hop-card {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .hop-meta {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .hop-idx {
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; flex-shrink: 0;
+    }
+    .hop-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+    .hop-status { font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
+    .hop-url {
+      font-size: 11px; font-family: 'JetBrains Mono', monospace;
+      color: var(--text2); word-break: break-all;
+      background: var(--surface2); border-radius: 6px; padding: 6px 8px;
+    }
+    .hop-redirect-label {
+      font-size: 10px; color: var(--muted); margin: 8px 0 4px 2px;
+      font-weight: 600; letter-spacing: .5px;
+    }
+    .hop-target {
+      font-size: 11px; font-family: 'JetBrains Mono', monospace;
+      color: var(--blue); word-break: break-all;
+      background: var(--blue-dim); border: 1px solid rgba(96,165,250,.2);
+      border-radius: 6px; padding: 6px 8px;
+    }
+    .hop-params {
+      margin-top: 8px; border: 1px solid var(--border);
+      border-radius: 6px; overflow: hidden;
+    }
+    .hop-param-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; border-bottom: 1px solid var(--border);
+      font-size: 11px; font-family: 'JetBrains Mono', monospace;
+    }
+    .hop-param-row:last-child { border-bottom: none; }
+    .hop-param-key {
+      color: var(--text2); flex-shrink: 0; min-width: 140px;
+    }
+    .hop-param-key--security { color: var(--blue); font-weight: 700; }
+    .hop-param-val {
+      color: var(--text); flex: 1; word-break: break-all;
+      max-height: 48px; overflow: hidden;
+    }
+    .hop-connector {
+      text-align: center; font-size: 18px; color: var(--border2);
+      line-height: 1; padding: 4px 0;
+    }
+
     /* ── Compare / Diff ───────────────────────────────────────── */
     #compare-section {
       display: none; flex-direction: column; align-items: center;
@@ -900,6 +974,17 @@
         <div class="panel-header-line"></div>
       </div>
       <div id="swimlane-svg-wrap"></div>
+
+      <div id="redirect-chain-section" style="display:none">
+        <div class="redirect-chain-header" onclick="toggleRedirectChain()">
+          <span class="panel-header-label">Redirect Chain</span>
+          <span class="redirect-chain-count" id="redirect-chain-count"></span>
+          <div class="panel-header-line"></div>
+          <span class="redirect-chain-toggle" id="redirect-chain-toggle">▶</span>
+        </div>
+        <div id="redirect-chain-body"></div>
+      </div>
+
       <div id="step-drawer">
         <div class="drawer-header">
           <div class="drawer-title" id="drawer-title">Step Details</div>
@@ -1129,6 +1214,7 @@ function showAnalysis() {
   renderSecurityPanel(flowData);
   renderFilterBar();
   renderSwimlane();
+  renderRedirectChain(flowData);
 }
 
 // ─── Security Audit ───────────────────────────────────────────────────────────
@@ -1567,7 +1653,7 @@ function showStepDrawer(idx) {
   // ── REQUEST ──
   const raw = step.raw || {};
   let req = `<div class="raw-section">
-    <div class="raw-label-row"><div class="raw-label">Request Line</div><button class="copy-btn" onclick="copyById('${registerCopy(step.method+' '+step.url)}',this)">⎘ copy</button></div>
+    <div class="raw-label-row"><div class="raw-label">Request Line</div><div style="display:flex;gap:6px"><button class="copy-btn" onclick="copyById('${registerCopy(step.method+' '+step.url)}',this)">⎘ copy</button><button class="copy-btn" onclick="copyById('${registerCopy(buildCurl(step))}',this)">⎘ cURL</button></div></div>
     <div class="raw-body" style="max-height:60px">${escHtml(step.method)} ${escHtml(step.url)}</div></div>`;
 
   if (raw.reqHeaders?.length) {
@@ -1657,6 +1743,65 @@ function toggleSamlXml(id) {
   document.getElementById(id).classList.toggle('visible');
 }
 
+// ─── Redirect Chain ──────────────────────────────────────────────────────────
+const REDIRECT_SECURITY_PARAMS = new Set([
+  'code','state','error','error_description','session_hint',
+  'id_token','access_token','token','nonce','iss',
+]);
+
+function renderRedirectChain(fd) {
+  const section = document.getElementById('redirect-chain-section');
+  const hops = fd.steps.filter(s => s.locationHeader);
+  if (!hops.length) { section.style.display = 'none'; return; }
+
+  section.style.display = '';
+  document.getElementById('redirect-chain-count').textContent =
+    `${hops.length} hop${hops.length > 1 ? 's' : ''}`;
+
+  let html = '';
+  hops.forEach((step, i) => {
+    const sc = step.status;
+    const scColor = sc >= 400 ? 'var(--red)' : sc >= 300 ? 'var(--yellow)' : 'var(--green)';
+    let params = [];
+    let targetDisplay = step.locationHeader;
+    try {
+      const u = new URL(step.locationHeader);
+      u.searchParams.forEach((v, k) => params.push({ k, v }));
+    } catch {}
+
+    html += `<div class="hop-card">
+      <div class="hop-meta">
+        <span class="hop-idx">Step ${step.index + 1}</span>
+        <span class="hop-name">${escHtml(step.name)}</span>
+        <span class="hop-status" style="color:${scColor}">${sc}</span>
+        <button class="copy-btn" onclick="copyById('${registerCopy(step.url)}',this)">⎘ url</button>
+      </div>
+      <div class="hop-url">${escHtml(step.url)}</div>
+      <div class="hop-redirect-label">↳ redirects to</div>
+      <div class="hop-target">${escHtml(targetDisplay)}</div>
+      ${params.length ? `<div class="hop-params">${params.map(({ k, v }) => {
+        const sec = REDIRECT_SECURITY_PARAMS.has(k);
+        return `<div class="hop-param-row">
+          <span class="hop-param-key${sec ? ' hop-param-key--security' : ''}">${escHtml(k)}</span>
+          <span class="hop-param-val">${escHtml(v)}</span>
+          <button class="copy-btn" onclick="copyById('${registerCopy(v)}',this)">⎘</button>
+        </div>`;
+      }).join('')}</div>` : ''}
+    </div>`;
+    if (i < hops.length - 1) html += '<div class="hop-connector">↓</div>';
+  });
+
+  document.getElementById('redirect-chain-body').innerHTML = html;
+}
+
+function toggleRedirectChain() {
+  const body = document.getElementById('redirect-chain-body');
+  const toggle = document.getElementById('redirect-chain-toggle');
+  const opening = body.style.display === 'none';
+  body.style.display = opening ? 'block' : 'none';
+  toggle.classList.toggle('open', opening);
+}
+
 // ─── Verdict ─────────────────────────────────────────────────────────────────
 async function getVerdict() {
   if (!flowData || verdictFetched) return;
@@ -1735,6 +1880,20 @@ function copyById(id, btn) {
     btn.textContent = '✓';
     setTimeout(() => { btn.textContent = orig; }, 1500);
   });
+}
+
+function buildCurl(step) {
+  const raw = step.raw || {};
+  const esc = s => String(s).replace(/'/g, "'\\''");
+  const lines = [`curl -X ${step.method} '${esc(step.url)}'`];
+  for (const h of (raw.reqHeaders || [])) {
+    if (h.name.startsWith(':')) continue; // skip HTTP/2 pseudo-headers
+    lines.push(`  -H '${esc(h.name)}: ${esc(h.value)}'`);
+  }
+  if (raw.reqBody?.display) {
+    lines.push(`  --data-raw '${esc(raw.reqBody.display)}'`);
+  }
+  return lines.join(' \\\n');
 }
 
 function escHtml(s) {
