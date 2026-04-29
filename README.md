@@ -28,7 +28,7 @@ Click any step to open a detail drawer with:
 - **SAML decoder** — Issuer, NameID, Status, Destination, Attributes, raw XML. Handles both SAMLRequest (deflated) and SAMLResponse.
 - **Request/Response** — Filtered headers, formatted body (JSON, form-encoded, or raw), Location header highlighted, rate-limit headers surfaced.
 - **Timing** — DNS / Connect / TLS / Send / Wait / Receive broken out as a bar chart.
-- **Network errors** — Browser-level failures (e.g. `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`) are detected and shown with a human-readable label, cause summary, and a targeted fix hint.
+- **Network errors** — Browser-level failures are detected and shown with a human-readable label, cause summary, and a targeted fix hint.
 
 **4. AI Verdict (Claude-powered)**
 Sends the structured flow to Claude and streams back:
