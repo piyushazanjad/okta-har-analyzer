@@ -28,6 +28,7 @@ Click any step to open a detail drawer with:
 - **SAML decoder** — Issuer, NameID, Status, Destination, Attributes, raw XML. Handles both SAMLRequest (deflated) and SAMLResponse.
 - **Request/Response** — Filtered headers, formatted body (JSON, form-encoded, or raw), Location header highlighted, rate-limit headers surfaced.
 - **Timing** — DNS / Connect / TLS / Send / Wait / Receive broken out as a bar chart.
+- **Network errors** — Browser-level failures (e.g. `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`) are detected and shown with a human-readable label, cause summary, and a targeted fix hint.
 
 **4. AI Verdict (Claude-powered)**
 Sends the structured flow to Claude and streams back:
@@ -43,7 +44,18 @@ Upload two HAR files side-by-side to diff them:
 - Timing deltas shown per matched step (faster / slower vs baseline)
 - Each row is expandable to reveal the full URL, request/response headers, and body
 
-**6. Chat with Claude**
+**6. Security Audit**
+Runs a set of automated checks against the parsed flow and surfaces findings by severity (high / medium / low):
+- Missing or weak PKCE (`code_challenge`)
+- Implicit flow usage
+- Tokens in URL fragments or query strings
+- Insecure redirect URIs
+- Missing state parameter (CSRF risk)
+- Short-lived or already-expired tokens
+- Custom-to-default Okta domain switches that break SSO sessions
+- Browser-level network blocks (e.g. Private Network Access CORS rejections)
+
+**7. Chat with Claude**
 After loading a HAR, ask follow-up questions about the flow in a streaming chat panel — scoped to the parsed flow context.
 
 ---
