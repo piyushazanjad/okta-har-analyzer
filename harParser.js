@@ -166,7 +166,91 @@ function extractSAML(text) {
   } catch { return null; }
 }
 
+// Network-level error codes that appear in the HAR _error field (status 0)
+const NETWORK_ERROR_MAP = {
+  'ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS': {
+    label: 'Private Network Access Block',
+    summary: 'Chrome blocked a CORS preflight to a host classified as private/local under the Private Network Access (PNA) spec. The request never reached the network.',
+    hint: 'The Okta SDK is likely fetching JWKS keys from the default *.okta.com domain instead of the custom domain. Chrome flags the default Okta domain as non-public when the page is served from a custom domain. Fix: configure the Okta SDK issuer to use the custom domain, or ensure the server responds with "Access-Control-Allow-Private-Network: true" on the OPTIONS preflight.',
+  },
+  'ERR_BLOCKED_BY_RESPONSE': {
+    label: 'Blocked by Response Policy',
+    summary: 'The browser blocked the response due to a security policy (e.g. CORB, CORP, COEP).',
+    hint: 'Check CORS headers and cross-origin resource policies on the server.',
+  },
+  'ERR_FAILED': {
+    label: 'Network Request Failed',
+    summary: 'A generic network failure — the request could not be completed.',
+    hint: 'Look for a preceding blocked preflight or check network connectivity to the target host.',
+  },
+  'ERR_NETWORK_CHANGED': {
+    label: 'Network Changed',
+    summary: 'The network interface changed mid-request.',
+    hint: 'The user switched networks during the auth flow.',
+  },
+  'ERR_CONNECTION_REFUSED': {
+    label: 'Connection Refused',
+    summary: 'The target host actively refused the connection.',
+    hint: 'Check that the Okta domain is reachable and the correct port is being used.',
+  },
+  'ERR_NAME_NOT_RESOLVED': {
+    label: 'DNS Resolution Failed',
+    summary: 'The target hostname could not be resolved via DNS.',
+    hint: 'Verify the Okta domain name is correct and accessible from this network.',
+  },
+  'ERR_CERT_AUTHORITY_INVALID': {
+    label: 'TLS Certificate Invalid',
+    summary: 'The server\'s TLS certificate was not trusted by the browser.',
+    hint: 'Check the TLS certificate on the custom domain — it may be expired or misconfigured.',
+  },
+  'ERR_TIMED_OUT': {
+    label: 'Request Timed Out',
+    summary: 'The request exceeded the browser\'s timeout threshold.',
+    hint: 'Check Okta service status or network latency to the Okta domain.',
+  },
+};
+
+function extractNetworkError(entry) {
+  // _error is set on the entry (not on response) for browser-level failures
+  const rawError = entry._error || entry.response?._error || '';
+  if (!rawError) return null;
+
+  // Find a known error code within the raw error string
+  for (const [code, info] of Object.entries(NETWORK_ERROR_MAP)) {
+    if (rawError.includes(code)) {
+      return {
+        status: 0,
+        networkError: code,
+        errorCode: code,
+        errorSummary: info.summary,
+        label: info.label,
+        hint: info.hint,
+        raw: rawError,
+      };
+    }
+  }
+
+  // Unknown network error — still surface it
+  if (rawError.startsWith('net::') || rawError.startsWith('ERR_')) {
+    return {
+      status: 0,
+      networkError: rawError,
+      errorCode: rawError,
+      errorSummary: `Browser-level network error: ${rawError}`,
+      label: 'Network Error',
+      hint: 'This is a browser network-layer failure — the request never reached the server.',
+      raw: rawError,
+    };
+  }
+
+  return null;
+}
+
 function extractErrorFromResponse(entry) {
+  // Check for browser-level network errors first (these have status 0)
+  const networkErr = extractNetworkError(entry);
+  if (networkErr) return networkErr;
+
   if (!entry.response || entry.response.status < 400) return null;
   const text = entry.response.content?.text || '';
   if (!text) return { status: entry.response.status };
@@ -566,8 +650,14 @@ export function buildClaudePrompt(flowData) {
     }
     if (step.error) {
       const e = step.error;
-      parts.push(`  ⚠ ERROR ${e.status}: ${e.errorCode || ''} — ${e.errorSummary || e.raw || ''}`);
-      if (e.errorCauses?.length) parts.push(`  Causes: ${e.errorCauses.join(', ')}`);
+      if (e.networkError) {
+        parts.push(`  🚫 NETWORK ERROR: ${e.label} (${e.networkError})`);
+        parts.push(`  → ${e.errorSummary}`);
+        parts.push(`  → Fix hint: ${e.hint}`);
+      } else {
+        parts.push(`  ⚠ ERROR ${e.status}: ${e.errorCode || ''} — ${e.errorSummary || e.raw || ''}`);
+        if (e.errorCauses?.length) parts.push(`  Causes: ${e.errorCauses.join(', ')}`);
+      }
     }
     if (step.artifacts?.jwts?.length) {
       const jwt = step.artifacts.jwts[0];

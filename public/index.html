@@ -1207,6 +1207,20 @@ function runSecurityAudit(fd) {
     }
   }
 
+  // 9. Browser-level network errors (ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS, etc.)
+  const networkErrors = fd.steps.filter(s => s.error?.networkError);
+  if (networkErrors.length) {
+    for (const s of networkErrors) {
+      const e = s.error;
+      findings.push({
+        sev: e.networkError === 'ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS' ? 'high' : 'medium',
+        icon: '🚫',
+        title: e.label || 'Network Request Blocked',
+        detail: `"${s.name}" (${s.method} ${s.url}): ${e.errorSummary}`,
+      });
+    }
+  }
+
   return findings;
 }
 
@@ -1317,6 +1331,7 @@ function phaseColor(step) {
   return PHASE_COLORS[step.phase] || '#64748b';
 }
 function statusColor(s) {
+  if (s === 0) return '#f87171'; // network-blocked
   if (!s) return '#64748b';
   if (s >= 400) return '#f87171';
   if (s >= 300) return '#fbbf24';
@@ -1414,7 +1429,7 @@ function renderSwimlane() {
       fill="${scode}22" stroke="${scode}" stroke-width="1" pointer-events="none"/>
     <text x="${sbx+sbw/2}" y="${sby+14}" text-anchor="middle"
       fill="${scode}" font-size="11" font-family="JetBrains Mono,monospace" font-weight="700"
-      pointer-events="none">${step.status||'?'}</text>`;
+      pointer-events="none">${step.status === 0 ? 'BLK' : (step.status||'?')}</text>`;
 
     // Artifact badges
     let badgeX = W - sbw - 60;
@@ -1485,12 +1500,18 @@ function showStepDrawer(idx) {
 
   if (step.error) {
     const e = step.error;
+    const labelHtml = e.label ? `<div class="error-code" style="color:var(--red)">${escHtml(e.label)}</div>` : '';
+    const codeHtml  = e.networkError
+      ? `<div class="error-code" style="font-size:11px;opacity:.8;margin-top:2px">${escHtml(e.networkError)}</div>`
+      : (e.errorCode ? `<div class="error-code">${escHtml(e.errorCode)}</div>` : '');
     ov += `<div class="raw-section"><div class="raw-label">Error</div>
       <div class="error-block">
-        ${e.errorCode?`<div class="error-code">${escHtml(e.errorCode)}</div>`:''}
-        ${e.errorSummary?`<div class="error-summary">${escHtml(e.errorSummary)}</div>`:''}
+        ${labelHtml}
+        ${codeHtml}
+        ${e.errorSummary?`<div class="error-summary" style="margin-top:4px">${escHtml(e.errorSummary)}</div>`:''}
+        ${e.hint?`<div class="error-summary" style="margin-top:6px;color:var(--yellow,#fbbf24)">💡 ${escHtml(e.hint)}</div>`:''}
         ${e.errorCauses?.length?`<div class="error-summary" style="margin-top:6px;color:var(--text2)">${e.errorCauses.map(c=>escHtml(c)).join('<br/>')}</div>`:''}
-        ${e.raw&&!e.errorCode?`<div class="error-code" style="white-space:pre-wrap">${escHtml(e.raw)}</div>`:''}
+        ${e.raw&&!e.networkError&&!e.errorCode?`<div class="error-code" style="white-space:pre-wrap">${escHtml(e.raw)}</div>`:''}
       </div></div>`;
   }
 
@@ -1567,10 +1588,11 @@ function showStepDrawer(idx) {
 
   // ── RESPONSE ──
   const sc = step.status;
-  const scColor = sc>=400?'var(--red)':sc>=300?'var(--yellow)':'var(--green)';
+  const scColor = sc===0?'var(--red)':sc>=400?'var(--red)':sc>=300?'var(--yellow)':'var(--green)';
+  const scLabel = sc===0 ? '0 (blocked — no HTTP response)' : sc;
   let res = `<div class="raw-section"><div class="raw-label">Status</div>
     <div class="raw-body" style="max-height:50px">
-      <span style="color:${scColor};font-weight:700">${sc}</span> ${escHtml(step.statusText||'')}
+      <span style="color:${scColor};font-weight:700">${scLabel}</span> ${escHtml(step.statusText||'')}
     </div></div>`;
 
   if (raw.resHeaders?.length) {
